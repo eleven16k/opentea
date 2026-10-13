@@ -1,4 +1,4 @@
-# opentea
+# OPENTEA
 
 **A multi-agent development system where you only state what you want.**
 **你只管提需求，团队负责交付。**
