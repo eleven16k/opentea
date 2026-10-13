@@ -88,16 +88,98 @@ tea "我想要一个导出周报的功能"
 
 ---
 
-## 席位与技能矩阵
+## 使用指南
 
-| 席位 | runtime | 职责 | 技能 |
-|---|---|---|---|
-| `dev.pm` | codex | 需求验证、拆票建票、架构裁定 | idea-validation · deep-research · office-hours · context-builder |
-| `dev.build` | claude-code | 按冻结 AC 实现 + TDD | development-team · TDD · systematic-debugging · domain-modeling |
-| `review.review` | codex | 独立审核（**刻意不含** implement/TDD） | code-audit · verification-before-completion |
+### 一张票的生命周期
 
-**多模型扩展**：GLM/DeepSeek/Kimi 可作跨模型顾问（`pi --provider qoder-cn` 或 ZCode 无头模式）；
-若持有智谱 Coding Plan，review 席可切 `runtime: pi`（`ZAI_CODING_CN_API_KEY` 在 OpenRig 白名单内）。
+```
+你提需求 ──→ PM 验证 ──→ GO ──→ 自动建票(ready-for-agent) ──→ 看门狗派发
+                │                                              │
+                ├─ REFINE ──→ PM 向你追问（≤3 问）──→ 你答 ──→ 重新裁决
+                └─ PAUSE ──→ 附理由退回（证据不足，不投入）        ▼
+                                                    build 实现 → SUBMIT_REVIEW
+                                                                │
+                你拍板 ←── 显式分歧 ──(如有)── 独立审核 ←────────┘
+                                            │
+                            PASS → Done │ 退回 → build 修复循环
+```
+
+### 你要做的只有三件事
+
+**① 提需求** —— 大白话即可，不要求格式：
+
+```bash
+tea "我想要一个登录页，支持手机号验证码登录"
+# 等价于: rig send dev-pm@opentea "[用户需求] ... 请按需求入口规程处理"
+```
+
+**② 答 PM 的追问** —— PM 验证后可能回来问（最多 3 个），答得越具体越好
+（"大家都需要"这类回答会被追着不放，这是故意的）：
+
+```bash
+rig capture dev-pm@opentea --lines 40                    # 看它问了什么
+rig send dev-pm@opentea "[用户澄清] 1... 2... 3..."       # 回答
+```
+
+**③ 拍板** —— 出现以下两种情况时需要你：
+- **架构/选型类需求**：deep-research 辩论后给出带选项和代价的决策点，你选一个
+- **审核退回且 PM 判断需仲裁**：看票 comment 里的 ESCALATE 项
+
+### 命令速查
+
+```bash
+tea --status                              # 三席状态一览
+tea --log                                 # build 席最近输出
+rig capture dev-pm@opentea --lines 40     # 看 PM 窗口（追问/裁决在这）
+rig capture review-review@opentea --lines 40
+rig send dev-build@opentea "补充信息..."   # 给实现席加背景
+pi --provider qoder-cn --model GLM-5.3 -p "问题"   # GLM 跨模型第二意见
+tail -5 /tmp/opentea-watchdog.log         # 看门狗日志
+
+# 开工 / 收工
+source <凭据目录>/daemon.env && rig daemon start
+rig up opentea --existing
+rig down opentea
+```
+
+---
+
+## 席位职责
+
+### `dev.pm` — PM 席（codex）· 需求入口与裁定
+
+| 职责 | 描述 |
+|---|---|
+| **需求验证** | 收到需求先跑 `idea-validation` 六问（需求真实性/现状/最渴望用户/最窄楔子/意外发现/未来价值）；缺证据向你追问，一次 ≤3 问；PAUSE 的需求附理由退回，不投入 |
+| **研究组织** | 架构/选型类需求先跑 `deep-research`：多研究员并行调研 → 三角色对抗辩论 → 方案 + 显式分歧清单交你拍板 |
+| **拆票建票** | GO 后经 Plane API 自动建票：故事 + 冻结 AC（可观测）+ 范围/非范围 + 依赖，打 `ready-for-agent` |
+| **裁定权** | 范围、优先级、例外仲裁；**无权跳过验证直接建票**（用户催促也不行） |
+| **不做** | 不写实现代码、不代替独立审核下结论、不擅自扩范围 |
+
+### `dev.build` — 开发者席（claude-code）· 实现与证据
+
+| 职责 | 描述 |
+|---|---|
+| **六步纪律** | 图探索 → 实读源码 → domain-modeling → 复用最小设计 → 实现/验证 → 独立审核；每步留下明确产物 |
+| **按冻结 AC 实现** | 不擅自缩减 AC 让自己通过；改动范围限定在当前 AC |
+| **证据交付** | SUBMIT_REVIEW 必含：逐 AC 对照表（MET/NOT_MET/**UNPROVEN**）+ SHA-256 制品指纹 + 精确命令与观察 + 盲区声明 |
+| **不做** | 不自宣通过（工具层拒绝开发者自审）；不把"完成 90%"当结论 |
+
+### `review.review` — 独立审核席（codex）· 质量门禁
+
+| 职责 | 描述 |
+|---|---|
+| **结构独立** | 独立 pod、只有 `can_observe` 边（收不到实现上下文与派单）；技能集**刻意不含** implement/TDD |
+| **独立核对** | 只读冻结 AC 与已提交制品（不读未提交工作区）；逐 AC 核对，不抽样；不接受转述 |
+| **四态结论** | PASS / CHANGES_REQUESTED（附阻断项+对应 AC+预期行为）/ NEEDS_EVIDENCE（不假称代码错误）/ ESCALATE（交 PM） |
+| **不做** | 不用开发者身份自审；建议与阻断分开写，防止混优先级 |
+
+### `ready-watchdog` — 派发看门狗（launchd 常驻）
+
+| 职责 | 描述 |
+|---|---|
+| **自动派发** | 每 3 分钟零 LLM 轮询 Plane：发现 `ready-for-agent` 且无 assignee 的票才唤醒 build 席 |
+| **安全省电** | 防重复唤醒（状态文件）；seat 离线时静默跳过；不消耗模型额度 |
 
 ---
 
