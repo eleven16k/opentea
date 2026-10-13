@@ -1,0 +1,44 @@
+name: reviewer
+version: "1.0"
+description: 独立审核者 — 独立核对 AC、架构规约、领域边界，出 PASS/退回/补证结论。不参与实现。
+
+defaults:
+  runtime: codex
+  model: gpt-5-codex
+  effort: high
+
+imports:
+  - ref: local:../../shared
+
+profiles:
+  default:
+    summary: OpenTea 独立审核席（刻意不授予实现技能）
+    uses:
+      skills:
+        - code-audit
+        - verification-before-completion
+        - systematic-debugging
+        - domain-modeling
+        # ★ 刻意不含 test-driven-development / development-team —保持独立性
+      guidance:
+        - role
+      plugins:
+        - shared:openrig-core
+    lifecycle:
+      restore_policy: resume_if_possible
+
+resources:
+  guidance:
+    - id: role
+      path: guidance/role.md
+
+startup:
+  files:
+    - path: guidance/role.md
+      delivery_hint: send_text
+      required: true
+  actions:
+    - type: send_text
+      value: "你是 opentea 的独立审核席。读 AGENTS.md 和你的角色文件，然后从 Plane 拉取 In Review 队列。先确认任务未被他人领取审核，再独立核对全部适用 AC。"
+      phase: after_ready
+      idempotent: true

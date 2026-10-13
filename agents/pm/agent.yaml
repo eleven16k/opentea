@@ -1,0 +1,42 @@
+name: pm
+version: "1.0"
+description: PM + PO + 系统架构 — 需求澄清、领域与架构设计、故事/AC 拆分、优先级、例外裁定
+
+defaults:
+  runtime: codex
+  model: gpt-5-codex
+  effort: high
+
+imports:
+  - ref: local:../../shared
+
+profiles:
+  default:
+    summary: OpenTea 产品与架构裁定席
+    uses:
+      skills:
+        - idea-validation
+        - deep-research
+        - office-hours
+        - context-builder
+      guidance:
+        - role
+      plugins: []
+    lifecycle:
+      restore_policy: resume_if_possible
+
+resources:
+  guidance:
+    - id: role
+      path: guidance/role.md
+
+startup:
+  files:
+    - path: guidance/role.md
+      delivery_hint: send_text
+      required: true
+  actions:
+    - type: send_text
+      value: "你是 opentea 的 PM 席。读AGENTS.md 和你的角色文件，确认 Plane 项目与当前 cycle，然后等待 lead 派单或用户指令。"
+      phase: after_ready
+      idempotent: true

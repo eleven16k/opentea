@@ -1,0 +1,31 @@
+name: shared
+version: "1.0"
+description: OpenTea 共享资源池 — OpenRig 原生 skills 与 openrig-core 插件
+
+resources:
+  skills:
+    - id: development-team
+      path: skills/pods/development-team
+    - id: office-hours
+      path: skills/pm/office-hours
+    - id: context-builder
+      path: skills/pm/context-builder
+    - id: test-driven-development
+      path: skills/process/test-driven-development
+    - id: systematic-debugging
+      path: skills/process/systematic-debugging
+    - id: verification-before-completion
+      path: skills/process/verification-before-completion
+    - id: dogfood
+      path: skills/process/dogfood
+    - id: agent-browser
+      path: skills/process/agent-browser
+    - id: domain-modeling
+      path: skills/process/domain-modeling
+
+  plugins:
+    - id: openrig-core
+      plugin_type: auto
+      source:
+        kind: local
+        path: plugins/openrig-core

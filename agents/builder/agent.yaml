@@ -1,0 +1,48 @@
+name: builder
+version: "1.0"
+description: 开发者 — 按冻结 AC 实现、测试、提交审核。只做实现，不做审核结论。
+
+defaults:
+  runtime: claude-code
+  effort: high
+
+imports:
+  - ref: local:../../shared
+
+profiles:
+  default:
+    summary: OpenTea 实现席
+    uses:
+      skills:
+        - development-team
+        - test-driven-development
+        - systematic-debugging
+        - domain-modeling
+        - verification-before-completion
+      guidance:
+        - role
+      plugins:
+        - shared:openrig-core
+    lifecycle:
+      restore_policy: resume_if_possible
+
+resources:
+  guidance:
+    - id: role
+      path: guidance/role.md
+  runtime_resources:
+    - id: plane-mcp
+      path: runtime/mcp-fragment.json
+      runtime: claude-code
+      type: claude_mcp_fragment
+
+startup:
+  files:
+    - path: guidance/role.md
+      delivery_hint: send_text
+      required: true
+  actions:
+    - type: send_text
+      value: "你是 opentea 的开发者席。读 AGENTS.md 和你的角色文件，然后从 Plane 拉取 Ready 队列中依赖已满足的任务。先确认领取成功再改代码。"
+      phase: after_ready
+      idempotent: true

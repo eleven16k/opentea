@@ -1,0 +1,6 @@
+{
+  "name": "OpenTea",
+  "identifier": "OPENTEA",
+  "id": "<your-plane-project-id>",
+  "_comment": "在你自己的 Plane 实例创建项目后，把 id 换成实际值"
+}

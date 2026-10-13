@@ -1,0 +1,27 @@
+skills:
+  # 自研 skills（物理文件，非 symlink —— Codex 缓存会静默丢弃 symlink）
+  - skills/idea-validation/SKILL.md
+  - skills/deep-research/SKILL.md
+  - skills/code-audit/SKILL.md
+
+preconditions:
+  - name: OpenRig
+    detail: "@openrig/cli installed (rig doctor passes)"
+  - name: tmux
+    detail: "tmux installed"
+  - name: Node.js
+    detail: "Node 22 or 24"
+  - name: Codex auth
+    detail: "codex login status OK"
+  - name: Plane
+    detail: "instance reachable; PLANE_API_KEY set"
+  - name: Claude (optional seat)
+    detail: "standard claude auth login, or desktop-proxy env in daemon"
+
+compatibility:
+  runtimes: [codex, pi]
+  note: >
+    review seat runs on pi + qoder-cn provider (PAT via QODERCN_API_KEY).
+    Claude Code seats require standard `claude auth login`.
+    If your Claude uses a proxy-based auth (ANTHROPIC_BASE_URL +
+    PROXY_MANAGED token), claude-code seats will not start until that is resolved.

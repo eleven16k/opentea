@@ -1,0 +1,49 @@
+version: "0.2"
+name: opentea
+summary: >
+  OpenTea 多 agent 开发团队：开发 pod（PM 派单给实现席）
+  与独立审核 pod（只观察、不接受派单）。
+  审核独立性靠分 pod + 只观察边保证，不依赖具体 CLI。
+
+docs:
+  - path: README.md
+
+pods:
+  - id: dev
+    label: Development
+    members:
+      - id: pm
+        agent_ref: "local:agents/pm"
+        runtime: codex
+        profile: default
+        cwd: "."
+        label: "PM + Architect"
+      - id: build
+        agent_ref: "local:agents/builder"
+        runtime: claude-code
+        profile: default
+        cwd: "."
+        label: "Implementation (claude)"
+
+    edges:
+      - kind: delegates_to
+        from: pm
+        to: build
+
+  - id: review
+    label: Independent Review
+    members:
+      - id: review
+        agent_ref: "local:agents/reviewer"
+        runtime: codex
+        profile: default
+        cwd: "."
+        label: "Independent Review"
+
+    edges: []
+
+edges:
+  # ★ 审核者只观察 dev pod，不接受派单——独立性靠结构保证
+  - kind: can_observe
+    from: review.review
+    to: dev.build
