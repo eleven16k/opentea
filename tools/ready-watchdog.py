@@ -11,15 +11,38 @@
 状态文件: ~/.openrig/opentea-watchdog.state（记录已踢过的票，防重复唤醒）
 """
 import json
+import os
 import sys
 import time
 import urllib.request
 from pathlib import Path
 
-SECRETS = Path.home() / "ai-plan/openrig/.secrets"
+REPO_DIR = Path(os.environ.get("OT_REPO_DIR", Path(__file__).resolve().parents[1]))
+SECRETS = Path(os.environ.get("OT_SECRETS_DIR",
+                              Path.home() / "ai-plan/openrig/.secrets"))
 STATE_FILE = Path.home() / ".openrig/opentea-watchdog.state"
-PLANE = "http://localhost/api/v1/workspaces/ai-plan"
-PROJECT_ID = "884817bb-df58-447b-829f-f87eaf7f0378"
+PLANE = os.environ.get("PLANE_URL", "http://localhost") + "/api/v1/workspaces/ai-plan"
+
+
+def _project_id():
+    """从 plane/project.json 读取；占位符或缺失时明确报错，不猜。"""
+    override = os.environ.get("OT_PROJECT_ID")
+    if override:
+        return override
+    pj = REPO_DIR / "plane/project.json"
+    try:
+        pid = json.load(open(pj)).get("id", "")
+    except Exception:
+        pid = ""
+    if not pid or pid.startswith("<"):
+        sys.stderr.write(
+            f"[watchdog] plane/project.json 的 id 未配置（当前: {pid!r}）。"
+            f"运行 install.sh 或手动填入实际 project_id。\n")
+        sys.exit(2)
+    return pid
+
+
+PROJECT_ID = _project_id()
 TARGET_SEAT = "dev-build@opentea"
 RIG = "opentea"
 # 候选票 = 打了 ready-for-agent、无 assignee、state 不在终态

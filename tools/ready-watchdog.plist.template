@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.opentea.ready-watchdog</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>__REPO_DIR__/tools/ready-watchdog.py</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>180</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/opentea-watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/opentea-watchdog.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>OT_SECRETS_DIR</key>
+    <string>__SECRETS_DIR__</string>
+    <key>OT_REPO_DIR</key>
+    <string>__REPO_DIR__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

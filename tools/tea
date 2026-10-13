@@ -1,0 +1,32 @@
+#!/usr/bin/env zsh
+# tea — 向 opentea PM 席提需求
+# 用法:
+#   tea "我想要xxx"     # 提需求（PM 验证 → 拆票 → 全自动流转）
+#   tea --status        # 团队状态
+#   tea --log [N]       # 看 build 席最近输出
+
+RIG_NAME="${OT_RIG_NAME:-opentea}"
+PM_SEAT="${OT_PM_SEAT:-dev-pm@$RIG_NAME}"
+
+# rig 在 nvm 的 Node 22 下最稳
+NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+nvm use 22 >/dev/null 2>&1
+
+case "$1" in
+  --status) exec rig ps --nodes --rig "$RIG_NAME" ;;
+  --log)    exec rig capture "dev-build@$RIG_NAME" --lines "${2:-30}" ;;
+esac
+
+if [ $# -eq 0 ]; then
+  printf "描述你的需求: "
+  read -r req
+else
+  req="$*"
+fi
+[ -z "$req" ] && { echo "需求为空"; exit 1; }
+
+echo "→ 已提交给 PM 席（它会先验证需求，有疑问会在此窗口回复）"
+rig send "$PM_SEAT" "[用户需求] $req —— 请按需求入口规程处理：验证（idea-validation）→ 必要时追问 → GO 后拆票建票（打 ready-for-agent）→ 回报。"
+echo "  查看回复: rig capture $PM_SEAT --lines 40"
+echo "  查看进度: tea --status"

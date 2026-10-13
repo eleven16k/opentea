@@ -47,44 +47,31 @@
 
 ## 快速开始
 
-前置：Node.js 22/24、tmux、已认证的 [Codex](https://openai.com/codex)（可选：Claude Code 桌面版 / pi + 任一 provider）。
+```bash
+git clone https://github.com/eleven16k/opentea.git && cd opentea
+./install.sh
+```
+
+**这一条命令会自动处理全部第三方依赖**：Node.js 22（含 nvm）、tmux、Python、
+OpenRig CLI、Codex 认证检查、Plane 检测（未部署时加 `--deploy-plane` 自动部署）、
+API key 引导与校验、**OPENTEA 项目与标签自动创建**、凭据脚手架、看门狗注册。
+最后给出 `READY` / `NEEDS_ATTENTION` 的诚实结论。
 
 ```bash
-# 1. 安装 OpenRig
-npm install -g @openrig/cli
-rig setup
+./install.sh --dry-run        # 先预览将要做什么
+./install.sh --deploy-plane   # 本机没有 Plane 时自动部署
+```
 
-# 2. 部署 Plane（本地 Docker）
-#    https://developers.plane.so/self-hosting/overview
-#    建项目后把 id 写入 plane/project.json
+装完后：
 
-# 3. 配置 tracker 契约
-cp plane/issue-tracker.md <你的项目>/docs/agents/issue-tracker.md
-#    （把 base_url / workspace slug / project_id 换成你的）
-
-# 4. 启动团队
-source <你的凭据目录>/daemon.env     # PLANE_API_KEY 等
-rig daemon start
+```bash
+source ~/.opentea/secrets/daemon.env && rig daemon start
 rig up rig.yaml --cwd <你的项目目录> --yes
 
-# 5. 提需求
-rig send dev-pm@opentea "[用户需求] 我想要xxx —— 请按需求入口规程处理"
+tea "我想要一个导出周报的功能"        # 提需求（详见下方使用指南）
 ```
 
-建一个 `tea` 快捷命令（可选）：
-
-```bash
-cat > /usr/local/bin/tea <<'EOF'
-#!/usr/bin/env zsh
-rig send dev-pm@opentea "[用户需求] $* —— 请按需求入口规程处理：验证（idea-validation）→ 必要时追问 → GO 后拆票建票（打 ready-for-agent）→ 回报。"
-EOF
-chmod +x /usr/local/bin/tea
-
-tea "我想要一个导出周报的功能"
-```
-
-之后：PM 可能追问（`rig capture dev-pm@opentea` 查看，`rig send dev-pm@opentea "[用户澄清] ..."` 回答），
-看门狗自动派发，builder 实现，review 独立核对——你只在两头出现。
+> 不想用安装器？手动分步安装见 [docs/TUTORIAL.md](docs/TUTORIAL.md)。
 
 ---
 
