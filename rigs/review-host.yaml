@@ -1,0 +1,23 @@
+version: "0.2"
+name: opentea-review
+summary: >
+  opentea 审核专用 rig——部署在独立审核机上（多机架构 A 的机器 B）。
+  与开发机通过 Plane 协作：本机看门狗设 OT_QUEUE=review，只扫 In Review 队列。
+
+docs:
+  - path: README.md
+
+pods:
+  - id: review
+    label: Independent Review (remote host)
+    members:
+      - id: review
+        agent_ref: "local:../agents/reviewer"
+        runtime: codex
+        profile: default
+        cwd: "."
+        label: "Independent Review"
+
+    edges: []
+
+edges: []

@@ -49,6 +49,9 @@ RIG = "opentea"
 READY_LABEL = "ready-for-agent"
 DONE_STATES = {"Done", "Cancelled"}
 REVIEW_SEAT = os.environ.get("OT_REVIEW_SEAT", "review-review@opentea")
+# 本机看门狗管哪些队列：all（默认）| ready | review
+# 多机部署时按角色拆分：A 机设 ready，B 机设 review，避免双机同审
+QUEUE = os.environ.get("OT_QUEUE", "all")
 
 
 def log(msg):
@@ -163,8 +166,11 @@ def kick(ticket_id, name):
 
 
 def main():
+    if QUEUE not in ("all", "ready", "review"):
+        log(f"ERROR OT_QUEUE 非法: {QUEUE}（应为 all|ready|review）")
+        return 2
     try:
-        tickets = find_ready_tickets()
+        tickets = find_ready_tickets() if QUEUE in ("all", "ready") else []
     except Exception as e:
         log(f"ERROR 查询 Plane 失败: {e}")
         return 2
@@ -186,6 +192,8 @@ def main():
                     kicked_any = True
                     time.sleep(2)
     # ② In Review 票 → 踢 review 席（同一防重逻辑）
+    if QUEUE not in ("all", "review"):
+        return 1 if kicked_any else 0
     try:
         in_review = find_in_review_tickets()
     except Exception as e:
