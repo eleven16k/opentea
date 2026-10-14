@@ -59,12 +59,13 @@ if have node; then
     act "Node.js $(node -v) 不在支持范围（22/24）"
     ACTIONS=$((ACTIONS+1))
     if ! have nvm && [ ! -s "$HOME/.nvm/nvm.sh" ]; then
-      run "安装 nvm" 'git clone --depth 1 https://github.com/nvm-sh/nvm.git "$HOME/.nvm" 2>/dev/null; true'
+      # pin: v0.40.1 release tag（供应链固定）
+      run "安装 nvm (v0.40.1)" 'git clone --depth 1 --branch v0.40.1 https://github.com/nvm-sh/nvm.git "$HOME/.nvm" 2>/dev/null; true'
     fi
     run "安装 Node 22 (nvm)" '. "$HOME/.nvm/nvm.sh" && nvm install 22 && nvm use 22'
   fi
 else
-  run "安装 Node 22 (nvm)" 'git clone --depth 1 https://github.com/nvm-sh/nvm.git "$HOME/.nvm" 2>/dev/null; . "$HOME/.nvm/nvm.sh" && nvm install 22 && nvm use 22'
+  run "安装 Node 22 (nvm)" 'git clone --depth 1 --branch v0.40.1 https://github.com/nvm-sh/nvm.git "$HOME/.nvm" 2>/dev/null; . "$HOME/.nvm/nvm.sh" && nvm install 22 && nvm use 22'
 fi
 
 if have tmux; then ok "tmux $(tmux -V 2>/dev/null || echo '?')"
@@ -97,13 +98,18 @@ fi
 
 # ---------- 4. Plane ----------
 PLANE_STATE="unknown"
-if curl -s -o /dev/null -m 5 "$PLANE_URL/health/"; then
+if curl -sf -o /dev/null -m 5 "$PLANE_URL/health/"; then
   ok "Plane 可达 ($PLANE_URL)"; PLANE_STATE="up"
 else
   if [ "$DEPLOY_PLANE" = "1" ] && have docker; then
     run "部署 Plane（官方 compose，约 3-5 分钟）" \
       'git clone --depth 1 https://github.com/makeplane/plane.git /tmp/plane-deploy && cd /tmp/plane-deploy && ./setup.sh launcher'
-    PLANE_STATE="deploying"
+    if curl -sf -o /dev/null -m 8 "$PLANE_URL/health/"; then
+      ok "Plane 已可达"; PLANE_STATE="up"
+    else
+      fail "部署已执行但 Plane 仍不可达"
+      ACTIONS=$((ACTIONS+1)); PLANE_STATE="down"
+    fi
   else
     act "Plane 不可达。两种选择：a) 重跑并加 --deploy-plane 自动部署；b) 已有实例则 export PLANE_URL=<地址>"
     ACTIONS=$((ACTIONS+1))
@@ -117,8 +123,10 @@ if [ "$PLANE_STATE" = "up" ] && [ "$DRY_RUN" != "1" ]; then
     printf '\n%s\n%s\n' "需要 Plane API token（在 $PLANE_URL/workspace/<slug>/settings/api-tokens 生成）" "粘贴 token 后回车: "
     read -r KEY </dev/tty || read -r KEY
     if [ -n "$KEY" ]; then
-      if curl -s -m 8 -H "X-API-Key: $KEY" "$PLANE_URL/api/v1/users/me/" | grep -q '"id"'; then
-        mkdir -p "$SECRETS_DIR"; printf '%s' "$KEY" > "$SECRETS_DIR/plane-api-key"; chmod 600 "$SECRETS_DIR/plane-api-key"
+      if curl -sf -m 8 -H "X-API-Key: $KEY" "$PLANE_URL/api/v1/users/me/" | grep -q '"id"'; then
+        mkdir -p "$SECRETS_DIR"; chmod 700 "$SECRETS_DIR"
+        # umask 177 → 直接落成 600，消除 644 竞窗
+        ( umask 177; printf '%s' "$KEY" > "$SECRETS_DIR/plane-api-key" )
         PLANE_API_KEY="$KEY"; ok "Plane token 验证通过，已存 $SECRETS_DIR/plane-api-key"
       else
         fail "token 验证失败"; ACTIONS=$((ACTIONS+1))
@@ -130,13 +138,16 @@ if [ "$PLANE_STATE" = "up" ] && [ "$DRY_RUN" != "1" ]; then
 
   if [ -n "${PLANE_API_KEY:-}" ]; then
     WS="${WS_SLUG}"
-    EXIST=$(curl -s -m 8 -H "X-API-Key: $PLANE_API_KEY" "$PLANE_URL/api/v1/workspaces/$WS/projects/" | python3 -c "
+    EXIST=$(curl -sf -m 15 -H "X-API-Key: $PLANE_API_KEY" "$PLANE_URL/api/v1/workspaces/$WS/projects/" 2>/dev/null | python3 -c "
 import json,sys
 try:
     d=json.load(sys.stdin)
     print(next((p['id'] for p in d.get('results',[]) if p.get('identifier')=='OPENTEA'),''))
-except Exception: print('')")
-    if [ -n "$EXIST" ]; then
+except Exception: print('')") || EXIST="__FETCH_FAIL__"
+    if [ "$EXIST" = "__FETCH_FAIL__" ]; then
+      fail "项目列表查询失败（网络/API），跳过自动建项目以防重复创建"
+      ACTIONS=$((ACTIONS+1))
+    elif [ -n "$EXIST" ]; then
       ok "Plane 项目 OPENTEA 已存在 ($EXIST)"
     else
       run "自动创建 Plane 项目 OPENTEA + 5 个规范标签" \

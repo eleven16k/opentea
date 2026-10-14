@@ -9,19 +9,23 @@ H="X-API-Key: $KEY"
 CT="Content-Type: application/json"
 
 echo "创建项目 OPENTEA..."
-PID=$(curl -s -m 15 -X POST "$API/projects/" -H "$H" -H "$CT" \
+PID=$(curl -sf -m 15 -X POST "$API/projects/" -H "$H" -H "$CT" \
   -d '{"name":"OpenTea","identifier":"OPENTEA","description":"opentea multi-agent dev system"}' \
-  | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))") || true
 [ -n "$PID" ] || { echo "项目创建失败（可能已存在或权限不足）"; exit 1; }
 echo "  project_id=$PID"
 
 echo "创建规范标签..."
+FAILS=0
 for pair in "needs-triage:待评估" "needs-info:等报告人补充" "ready-for-agent:agent 可领取" "ready-for-human:需人来做" "wontfix:不做"; do
   name=${pair%%:*}; desc=${pair##*:}
-  code=$(curl -s -m 10 -X POST "$API/projects/$PID/labels/" -H "$H" -H "$CT" \
-    -d "{\"name\":\"$name\",\"description\":\"$desc\",\"color\":\"#6b7280\"}" -o /dev/null -w "%{http_code}")
+  code=$(curl -sf -m 10 -X POST "$API/projects/$PID/labels/" -H "$H" -H "$CT" \
+    -d "{\"name\":\"$name\",\"description\":\"$desc\",\"color\":\"#6b7280\"}" \
+    -o /dev/null -w "%{http_code}") || code="ERR"
   echo "  $name → $code"
+  [ "$code" = "201" ] || FAILS=$((FAILS+1))
 done
+[ "$FAILS" -gt 0 ] && { echo "有 $FAILS 个标签创建失败"; exit 1; }
 
 # 写回 project.json（模板化 → 实际 id）
 PJ="$REPO_DIR/plane/project.json"

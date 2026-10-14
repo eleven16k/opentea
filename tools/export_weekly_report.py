@@ -65,14 +65,16 @@ def api_get(path):
 
 def fetch_all(path):
     """GET 列表端点并跟随 next_cursor 翻页，返回拼接后的 results。"""
-    rows, cursor = [], None
+    rows, cursor, seen = [], None, set()
     while True:
         p = path
         if cursor:
             p += ("&" if "?" in p else "?") + "cursor=" + cursor
         data = api_get(p)
         rows.extend(data.get("results", []))
-        if data.get("next_page_results") and data.get("next_cursor"):
+        if data.get("next_page_results") and data.get("next_cursor") \
+                and data["next_cursor"] not in seen:
+            seen.add(data["next_cursor"])
             cursor = data["next_cursor"]
         else:
             return rows
@@ -101,6 +103,7 @@ def parse_ts(value):
     except ValueError:
         return None
     if stamp.tzinfo is None:
+        sys.stderr.write(f"[export] 无时区时间戳已跳过（票不会进周报）: {value!r}\n")
         return None
     return stamp
 
@@ -165,11 +168,19 @@ def build_report(now=None, fetch_issues=fetch_issues, fetch_states=fetch_states,
     return render(sections, start, end)
 
 
+def md_escape(text):
+    """标题进 markdown 报告前的净化：换行拍平、结构字符转义，防票名注入报告结构。"""
+    text = " ".join(str(text).split())
+    for ch, rep in (("\\", "\\\\"), ("#", "\\#"), ("[", "\\["), ("]", "\\]")):
+        text = text.replace(ch, rep)
+    return text
+
+
 def render(sections, start, end):
     lines = ["# OpenTea Weekly Done Report", "",
              "Window: %s – %s" % (format_sh(start), format_sh(end)), ""]
     for section in sections:
-        lines += ["## " + section["title"], "",
+        lines += ["## " + md_escape(section["title"]), "",
                   "- Completed: " + format_sh(section["completed_at"]),
                   "- Issue: " + section["url"]]
         if section["evidence"]:

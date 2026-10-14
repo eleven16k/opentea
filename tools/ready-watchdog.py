@@ -154,15 +154,24 @@ def find_ready_tickets():
     return tickets
 
 
-def kick(ticket_id, name):
+def kick(seat, ticket_id, name):
+    # 票名可能含 ANSI 转义/控制字符——净化后再进日志与终端消息
+    name = "".join(ch for ch in name if ch.isprintable())[:80]
+    msg = (f"看门狗发现票 {ticket_id[:8]}「{name}」，"
+           f"请按 AGENTS.md 工作流检查 Plane 队列并处理。")
     import subprocess
-    msg = (f"看门狗发现 Ready 票 {ticket_id[:8]}「{name}」，"
-           f"请按 AGENTS.md 工作流检查 Plane Ready 队列并领取执行。")
-    r = subprocess.run(["rig", "send", TARGET_SEAT, msg],
+    r = subprocess.run(["rig", "send", seat, msg],
                        capture_output=True, text=True, timeout=30)
     ok = r.returncode == 0
-    log(f"kick {TARGET_SEAT}: {'已发送' if ok else '失败 ' + r.stderr[:120]}")
+    log(f"kick {seat}: {'已发送' if ok else '失败 ' + r.stderr[:120]}")
     return ok
+
+
+def save_state(kicked):
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".tmp")  # 原子替换，防并发读到半截文件
+    tmp.write_text("\n".join(sorted(kicked)))
+    tmp.replace(STATE_FILE)
 
 
 def main():
@@ -186,7 +195,7 @@ def main():
         else:
             for tid, name in fresh:
                 log(f"发现 Ready 票: {name}")
-                if kick(TARGET_SEAT, f"看门狗发现 Ready 票 {tid[:8]}「{name}」，请按 AGENTS.md 工作流检查 Plane Ready 队列并领取执行。"):
+                if kick(TARGET_SEAT, tid, name + "（Ready）请按 AGENTS.md 工作流检查 Plane Ready 队列并领取执行。"):
                     state.add(f"ready:{tid}")
                     save_state(state)
                     kicked_any = True
@@ -203,7 +212,7 @@ def main():
     if fresh_rev and seat_alive(REVIEW_SEAT):
         for tid, name in fresh_rev:
             log(f"发现 In Review 票: {name}")
-            if kick(REVIEW_SEAT, f"看门狗发现 In Review 票 {tid[:8]}「{name}」，请按独立审核规程拉取并核对。"):
+            if kick(REVIEW_SEAT, tid, name + "（In Review）请按独立审核规程拉取并核对。"):
                 state.add(f"rev:{tid}")
                 save_state(state)
                 kicked_any = True
