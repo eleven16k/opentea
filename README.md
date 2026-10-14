@@ -24,6 +24,10 @@
 └──────────────────────┬──────────────────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────────────────┐
+│ 看门狗发现 In Review → 自动唤醒审核席（同样零人工）          │
+└──────────────────────┬──────────────────────────────────┘
+                       ▼
+┌─────────────────────────────────────────────────────────┐
 │ review 席 (codex) — 独立 pod，只观察不派单                 │
 │  独立核对全部 AC → PASS / 退回 / 补证                      │
 └─────────────────────────────────────────────────────────┘
@@ -165,8 +169,25 @@ rig down opentea
 
 | 职责 | 描述 |
 |---|---|
-| **自动派发** | 每 3 分钟零 LLM 轮询 Plane：发现 `ready-for-agent` 且无 assignee 的票才唤醒 build 席 |
-| **安全省电** | 防重复唤醒（状态文件）；seat 离线时静默跳过；不消耗模型额度 |
+| **双队列自动派发** | 每 3 分钟零 LLM 轮询 Plane：Ready 队列有新票 → 唤醒 build 席；In Review 队列有新票 → 唤醒 review 席。整条回路无人工 |
+| **多机队列拆分** | `OT_QUEUE=all\|ready\|review`——审核机上设 `review` 即成为专职审核机（多机架构，见下节） |
+| **安全省电** | 防重复唤醒（原子状态文件）；seat 离线时静默跳过；票名净化后才进日志；不消耗模型额度 |
+
+---
+
+## 多机部署
+
+单机是完整形态，多机是可选扩展。推荐架构 **Plane 中枢星型**：机器之间零直连，
+Plane（任务/证据）+ Git 远端（制品）是唯一共享基底，每台机器一套独立 rig + 独立看门狗、各扫各的队列段。
+
+| 机器 | 角色 | 看门狗配置 |
+|---|---|---|
+| 机器 A | `dev.pm` + `dev.build` | `OT_QUEUE=ready` |
+| 机器 B（审核机） | `review.review` | `OT_QUEUE=review`（用 `rigs/review-host.yaml`） |
+
+- 价值：developer 与 reviewer **物理上不同机器**，"同机自审"从制度禁止升级为物理不可能
+- B 离线时 A 可临时切回 `OT_QUEUE=all`（单机回退，零配置成本）
+- 完整手册（含 Plane 远程迁移、数据搬运脚本、验收清单）：[docs/RUNBOOK-multi-machine.md](docs/RUNBOOK-multi-machine.md)
 
 ---
 
@@ -182,16 +203,28 @@ rig down opentea
 
 ```
 opentea/
-├── rig.yaml           编排拓扑（pod / seat / 边）
-├── bundle.yaml        bundle 清单 + 前置条件
-├── agents/            各席位定义 + 角色规程
-├── skills/            自研 skills
-├── shared/            共享资源池（OpenRig 原生 skills 精选 + openrig-core）
-├── plane/             Plane 集成（tracker 契约 / 标签映射 / MCP fragment）
-├── governance/        工程规约模板（AGENTS / CONTEXT / ADR / runbooks）
-├── tools/             ready-watchdog.py（自动派发看门狗）
-└── docs/              使用教程 / 架构说明
+├── rig.yaml                          编排拓扑（开发 pod + 独立审核 pod）
+├── rigs/review-host.yaml             多机版：纯审核机 rig（见多机部署节）
+├── bundle.yaml                       bundle 清单 + 前置条件
+├── install.sh                        一键安装器（自动处理全部第三方依赖）
+├── agents/                           各席位定义 + 角色规程
+├── skills/                           自研 skills
+├── shared/                           共享资源池（OpenRig 原生 skills 精选 + openrig-core）
+├── plane/                            Plane 集成（tracker 契约 / 标签映射 / MCP fragment）
+├── governance/                       工程规约模板（AGENTS / CONTEXT / ADR / runbooks）
+├── tools/                            ready-watchdog.py（双队列看门狗）· tea（需求入口）
+│                                     migrate-plane-tickets.py（跨实例搬票）· bootstrap-plane.sh
+│                                     export_weekly_report.py（周报导出）
+├── tests/                            11 个回归用例（python3 -m unittest discover -s tests）
+└── docs/                             TUTORIAL（教程）· RUNBOOK-multi-machine（多机手册）
 ```
+
+## 质量与安全
+
+- 本仓库发布前经过四阶段代码审核（确定性规则扫描 → 分批子审 → 主控逐条复核 → 修复闭环），
+  全部阻断/建议项已处置
+- `install.sh` 的全部 API 调用带 `-f`、凭据落盘即 600、第三方引用 pin 版本
+- 回归：`python3 -m unittest discover -s tests`（11 用例）
 
 ## 前置条件与凭据纪律
 
@@ -202,9 +235,10 @@ opentea/
 
 ## 已知限制（诚实清单）
 
-- review 与 pm 同为 codex 时，`host/cli` 分离门禁会亮黄——建议 build 与 review 用不同 runtime
+- **单机模式**下 build 与 review 同机，`host/cli` 分离门禁会亮黄——按「多机部署」节把审核席放到独立机器后清零（B 离线回退单机时警告会如实亮起，属正确行为）
 - Plane MCP fragment 合并存在兼容性问题；seat 当前走 REST API（docs/agents/issue-tracker.md 的 curl 约定，完全可用）
 - pi 席位仅放行 openrouter/zai/kimi/minimax 四种 provider key（OpenRig 限制）
+- Plane 票状态名（In Review 等）需与实例实际状态名一致，跨实例部署时先核对
 
 ---
 
