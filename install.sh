@@ -29,7 +29,7 @@ inst() { printf '\033[36m[INSTALL]\033[0m %s\n' "$1"; }
 skip() { printf '\033[33m[SKIP]\033[0m %s\n' "$1"; }
 fail() { printf '\033[31m[FAIL]\033[0m %s\n' "$1"; }
 act()  { printf '\033[36m[ACTION]\033[0m %s\n' "$1"; }
-run()  { if [ "$DRY_RUN" = "1" ]; then skip "(dry-run) $1"; else inst "$1"; eval "$2"; fi; }
+run()  { if [ "$DRY_RUN" = "1" ]; then skip "(dry-run) $1"; else inst "$1"; if eval "$2"; then :; else fail "上一命令失败（已计入 NEEDS_ATTENTION）"; ACTIONS=$((ACTIONS+1)); fi; fi; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -140,7 +140,7 @@ except Exception: print('')")
       ok "Plane 项目 OPENTEA 已存在 ($EXIST)"
     else
       run "自动创建 Plane 项目 OPENTEA + 5 个规范标签" \
-        "KEY=\"$PLANE_API_KEY\"; WS=\"$WS\"; PLANE_URL=\"$PLANE_URL\"; REPO_DIR=\"$REPO_DIR\"; sh \"$REPO_DIR/tools/bootstrap-plane.sh\""
+        'KEY="$PLANE_API_KEY" WS="$WS" PLANE_URL="$PLANE_URL" REPO_DIR="$REPO_DIR" sh "$REPO_DIR/tools/bootstrap-plane.sh"'
     fi
   fi
 fi

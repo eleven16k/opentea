@@ -18,10 +18,27 @@ from pathlib import Path
 import sys
 import urllib.request
 
-PLANE_API = "http://localhost/api/v1/workspaces/ai-plan"
-PROJECT_ID = "884817bb-df58-447b-829f-f87eaf7f0378"
-WEB_BASE = "http://localhost/ai-plan/projects/" + PROJECT_ID + "/issues"
-SECRETS = Path.home() / "ai-plan/openrig/.secrets/plane-api-key"
+REPO_DIR = Path(__file__).resolve().parents[1]
+PLANE_URL = os.environ.get("PLANE_URL", "http://localhost")
+WS_SLUG = os.environ.get("PLANE_WORKSPACE_SLUG", "ai-plan")
+SECRETS = Path(os.environ.get(
+    "OT_SECRETS_DIR", Path.home() / ".opentea/secrets")) / "plane-api-key"
+if not SECRETS.exists():  # 兼容本仓库开发期的旧路径
+    SECRETS = Path.home() / "ai-plan/openrig/.secrets/plane-api-key"
+
+
+def _project_meta():
+    override = os.environ.get("OT_PROJECT_ID")
+    if override:
+        return override
+    pj = REPO_DIR / "plane/project.json"
+    d = json.load(open(pj))
+    return d["id"]
+
+
+PROJECT_ID = _project_meta()
+PLANE_API = f"{PLANE_URL}/api/v1/workspaces/{WS_SLUG}"
+WEB_BASE = f"{PLANE_URL}/{WS_SLUG}/projects/{PROJECT_ID}/issues"
 TZ_SH = timezone(timedelta(hours=8))  # Asia/Shanghai：1991 年后无夏令时，固定偏移
 DONE_STATE = "Done"
 EVIDENCE_MARKERS = ("<strong>REVIEW</strong>", "<strong>结论</strong>")

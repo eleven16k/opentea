@@ -54,12 +54,35 @@ def log(msg):
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
 
-def api_get(path):
+def api_get(path, params=""):
     key = (SECRETS / "plane-api-key").read_text().strip()
-    req = urllib.request.Request(
-        f"{PLANE}{path}", headers={"X-API-Key": key}, method="GET")
+    url = f"{PLANE}{path}"
+    if params:
+        url = f"{url}?{params}"
+    req = urllib.request.Request(url, headers={"X-API-Key": key}, method="GET")
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read())
+
+
+def fetch_all_issues():
+    """跨分页拉全量票——只取第一页会静默漏掉后排的 ready 票。
+    本版 Plane：默认页大小 1000，终止信号是 next_page_results=False；
+    盲目回传 next_cursor 会得到空页，故仅在服务端声明还有下一页时翻页。"""
+    issues, cursor, seen = [], None, set()
+    for _ in range(50):  # 死循环护栏
+        d = api_get(f"/projects/{PROJECT_ID}/issues/",
+                    f"cursor={cursor}" if cursor else "")
+        page = d.get("results", []) if isinstance(d, dict) else []
+        issues += page
+        if isinstance(d, dict) and d.get("next_page_results") and d.get("next_cursor"):
+            cursor = d["next_cursor"]
+            if cursor in seen:
+                break
+            seen.add(cursor)
+        else:
+            return issues
+    sys.stderr.write("[watchdog] 分页超过护栏，结果可能不完整\n")
+    return issues
 
 
 def rig_alive():
@@ -96,7 +119,7 @@ def find_ready_tickets():
     states = {s["id"]: s["name"]
               for s in api_get(f"/projects/{PROJECT_ID}/states/").get("results", [])}
     tickets = []
-    for issue in api_get(f"/projects/{PROJECT_ID}/issues/").get("results", []):
+    for issue in fetch_all_issues():
         label_ids = issue.get("labels") or []
         if ready_id not in label_ids:
             continue
