@@ -48,6 +48,7 @@ RIG = "opentea"
 # 候选票 = 打了 ready-for-agent、无 assignee、state 不在终态
 READY_LABEL = "ready-for-agent"
 DONE_STATES = {"Done", "Cancelled"}
+REVIEW_SEAT = os.environ.get("OT_REVIEW_SEAT", "review-review@opentea")
 
 
 def log(msg):
@@ -85,19 +86,38 @@ def fetch_all_issues():
     return issues
 
 
-def rig_alive():
-    """daemon 和目标 seat 都活着才值得踢。"""
+def seat_alive(seat):
+    """指定席位的 tmux 会话处于 run 态才值得踢。"""
     import subprocess
     try:
         out = subprocess.run(
             ["rig", "ps", "--nodes", "--rig", RIG],
             capture_output=True, text=True, timeout=20)
-        for line in out.stdout.splitlines():
-            if TARGET_SEAT in line and " run " in line:
-                return True
-        return False
+        return any(seat in line and " run " in line
+                   for line in out.stdout.splitlines())
     except Exception:
         return False
+
+
+def rig_alive():
+    return seat_alive(TARGET_SEAT)
+
+
+def find_in_review_tickets():
+    """In Review 且未指派审核者的票（审核席领取后 assignees 非空即跳过）。"""
+    states = {s["id"]: s["name"]
+              for s in api_get(f"/projects/{PROJECT_ID}/states/").get("results", [])}
+    review_state = next((sid for sid, n in states.items() if n == "In Review"), None)
+    if not review_state:
+        return []
+    tickets = []
+    for issue in fetch_all_issues():
+        if issue.get("state") != review_state:
+            continue
+        if issue.get("assignees"):
+            continue
+        tickets.append((issue["id"], issue.get("name", "?")))
+    return tickets
 
 
 def load_state():
@@ -148,24 +168,39 @@ def main():
     except Exception as e:
         log(f"ERROR 查询 Plane 失败: {e}")
         return 2
-    if not tickets:
-        return 0
     state = load_state()
-    fresh = [(i, n) for i, n in tickets if i not in state]
-    if not fresh:
-        return 0
-    if not rig_alive():
-        log(f"发现 {len(fresh)} 张 Ready 票但 {TARGET_SEAT} 不在线，跳过（rig 未起或 seat 异常）")
-        return 0
-    kicked = False
-    for tid, name in fresh:
-        log(f"发现 Ready 票: {name}")
-        if kick(tid, name):
-            state.add(tid)
-            save_state(state)
-            kicked = True
-            time.sleep(2)
-    return 1 if kicked else 0
+    kicked_any = False
+    # ① Ready 票 → 踢 build 席
+    if tickets:
+        fresh = [(i, n) for i, n in tickets if f"ready:{i}" not in state]
+        if not fresh:
+            pass
+        elif not rig_alive():
+            log(f"发现 {len(fresh)} 张 Ready 票但 {TARGET_SEAT} 不在线，跳过（rig 未起或 seat 异常）")
+        else:
+            for tid, name in fresh:
+                log(f"发现 Ready 票: {name}")
+                if kick(TARGET_SEAT, f"看门狗发现 Ready 票 {tid[:8]}「{name}」，请按 AGENTS.md 工作流检查 Plane Ready 队列并领取执行。"):
+                    state.add(f"ready:{tid}")
+                    save_state(state)
+                    kicked_any = True
+                    time.sleep(2)
+    # ② In Review 票 → 踢 review 席（同一防重逻辑）
+    try:
+        in_review = find_in_review_tickets()
+    except Exception as e:
+        log(f"ERROR 查询 In Review 失败: {e}")
+        in_review = []
+    fresh_rev = [(i, n) for i, n in in_review if f"rev:{i}" not in state]
+    if fresh_rev and seat_alive(REVIEW_SEAT):
+        for tid, name in fresh_rev:
+            log(f"发现 In Review 票: {name}")
+            if kick(REVIEW_SEAT, f"看门狗发现 In Review 票 {tid[:8]}「{name}」，请按独立审核规程拉取并核对。"):
+                state.add(f"rev:{tid}")
+                save_state(state)
+                kicked_any = True
+                time.sleep(2)
+    return 1 if kicked_any else 0
 
 
 if __name__ == "__main__":
