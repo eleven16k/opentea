@@ -182,20 +182,6 @@ def notify_macos(title, body):
                    capture_output=True, text=True, timeout=10)
 
 
-def find_done_transitions():
-    """上次扫描后新变为 Done 的票（交付完成的时刻）。"""
-    states = {s["id"]: s["name"]
-              for s in api_get(f"/projects/{PROJECT_ID}/states/").get("results", [])}
-    done_id = next((sid for sid, n in states.items() if n == "Done"), None)
-    if not done_id:
-        return []
-    done = []
-    for issue in fetch_all_issues():
-        if issue.get("state") == done_id:
-            done.append((issue["id"], issue.get("name", "?")))
-    return done
-
-
 def main():
     if QUEUE not in ("all", "ready", "review"):
         log(f"ERROR OT_QUEUE 非法: {QUEUE}（应为 all|ready|review）")
@@ -239,18 +225,21 @@ def main():
                 save_state(state)
                 kicked_any = True
                 time.sleep(2)
-    # ③ 交付完成 → macOS 通知（回到人类的屏幕）
+    # ③ 全生命周期状态变化 → macOS 通知（处理中/待审核/完成/新票）
     try:
-        for tid, name in find_done_transitions():
-            key = f"done:{tid}"
-            if key not in state:
-                state.add(key)
-                save_state(state)
-                notify_macos("交付完成 ✅", name[:60])
-                log(f"已通知交付完成: {name}")
-                kicked_any = True
+        for tid, name, old, new in find_state_transitions():
+            key = f"st:{tid}:{new}"
+            if key in state:
+                continue
+            state.add(key)
+            title, body = TRANSITION_MSG.get(new, (f"状态变化 → {new}", None))
+            label = ("新需求" if not old else None) or title
+            notify_macos(label, f"{name[:40]} — {body or '状态更新'}")
+            log(f"状态通知: {name[:30]} {old or '新'} → {new}")
+            save_state(state)
+            kicked_any = True
     except Exception as e:
-        log(f"ERROR 交付通知失败: {e}")
+        log(f"ERROR 状态通知失败: {e}")
     return 1 if kicked_any else 0
 
 
